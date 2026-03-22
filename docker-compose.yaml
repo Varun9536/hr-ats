@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: autohire-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: autohire
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: autohire
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - autohire-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autohire"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  autohire:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: autohire-app
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://autohire:${DB_PASSWORD}@postgres:5432/autohire
+      JWT_SECRET: ${JWT_SECRET}
+      NODE_ENV: production
+      PORT: 3001
+    volumes:
+      - uploads_data:/app/public/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - autohire-network
+
+volumes:
+  postgres_data:
+  uploads_data:
+
+networks:
+  autohire-network:
+    driver: bridge
