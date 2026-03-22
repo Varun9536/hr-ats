@@ -40,6 +40,21 @@ services:
     networks:
       - autohire-network
 
+  seed:
+    image: node:24-alpine
+    container_name: autohire-seed
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      DATABASE_URL: postgresql://autohire:${DB_PASSWORD}@postgres:5432/autohire
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "npm ci && npx prisma migrate deploy && npx tsx prisma/seed.ts"
+    networks:
+      - autohire-network   
+
 volumes:
   postgres_data:
   uploads_data:
