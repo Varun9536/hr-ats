@@ -7,6 +7,7 @@ import { STATUS_COLORS, STATUS_LABELS } from "@/types"
 import { clsx } from "clsx"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
 
+import type { Status } from "@prisma/client"
 interface DashData {
   totals: Record<string, number>
   trends: { addedThisWeek: number; addedThisMonth: number; weeklyTrend: { label: string; count: number }[] }
@@ -18,7 +19,7 @@ interface DashData {
   sourceBreakdown: { source: string; count: number }[]
 }
 
-const PIE_COLORS = ["#0ea5e9","#10b981","#f59e0b","#8b5cf6","#ef4444","#06b6d4","#84cc16","#f43f5e"]
+const PIE_COLORS = ["#0ea5e9", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#06b6d4", "#84cc16", "#f43f5e"]
 
 function StatCard({ label, value, icon: Icon, color, sub, href }: any) {
   const content = (
@@ -126,7 +127,7 @@ export default function DashboardPage() {
             {sourceBreakdown.length > 0 ? (
               <ResponsiveContainer width="100%" height={160}>
                 <PieChart>
-                  <Pie data={sourceBreakdown} dataKey="count" nameKey="source" cx="50%" cy="50%" outerRadius={65} label={({ source, percent }) => `${source} ${(percent*100).toFixed(0)}%`} labelLine={false} fontSize={10}>
+                  <Pie data={sourceBreakdown} dataKey="count" nameKey="source" cx="50%" cy="50%" outerRadius={65} label={({ source, percent }) => `${source} ${(percent * 100).toFixed(0)}%`} labelLine={false} fontSize={10}>
                     {sourceBreakdown.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                   </Pie>
                   <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
@@ -141,23 +142,26 @@ export default function DashboardPage() {
           <div className="ats-card p-5">
             <h2 className="text-sm font-bold text-slate-700 mb-4">Pipeline Status</h2>
             <div className="space-y-2.5">
-              {["APPLIED","SCREENING","SHORTLISTED","INTERVIEW","OFFER","SELECTED","REJECTED"].map(s => {
-                const key = s.toLowerCase().replace("_","")
-                const val = totals[key] || totals[s.toLowerCase()] || 0
-                return (
-                  <div key={s} className="flex items-center gap-2">
-                    <div className="w-20 shrink-0">
-                      <span className={clsx("status-pill text-xs", STATUS_COLORS[s as any])}>{STATUS_LABELS[s as any]}</span>
+
+
+              {(["APPLIED", "SCREENING", "SHORTLISTED", "INTERVIEW", "OFFER", "SELECTED", "REJECTED"] as Status[])
+                .map((s) => {
+                  const key = s.toLowerCase().replace("_", "")
+                  const val = totals[key] || totals[s.toLowerCase()] || 0
+                  return (
+                    <div key={s} className="flex items-center gap-2">
+                      <div className="w-20 shrink-0">
+                        <span className={clsx("status-pill text-xs", STATUS_COLORS[s])}>{STATUS_LABELS[s]}</span>
+                      </div>
+                      <div className="flex-1 h-4 bg-slate-50 rounded-full overflow-hidden">
+                        <div className={clsx("h-full rounded-full",
+                          s === "SELECTED" ? "bg-emerald-500" : s === "REJECTED" ? "bg-red-400" : s === "INTERVIEW" ? "bg-amber-400" : s === "SHORTLISTED" ? "bg-blue-400" : s === "OFFER" ? "bg-cyan-500" : "bg-slate-300"
+                        )} style={{ width: totals.total ? `${(val / totals.total) * 100}%` : "0%" }} />
+                      </div>
+                      <span className="w-7 text-right text-xs font-bold text-slate-600 tabular-nums">{val}</span>
                     </div>
-                    <div className="flex-1 h-4 bg-slate-50 rounded-full overflow-hidden">
-                      <div className={clsx("h-full rounded-full",
-                        s==="SELECTED"?"bg-emerald-500":s==="REJECTED"?"bg-red-400":s==="INTERVIEW"?"bg-amber-400":s==="SHORTLISTED"?"bg-blue-400":s==="OFFER"?"bg-cyan-500":"bg-slate-300"
-                      )} style={{ width: totals.total ? `${(val/totals.total)*100}%` : "0%" }} />
-                    </div>
-                    <span className="w-7 text-right text-xs font-bold text-slate-600 tabular-nums">{val}</span>
-                  </div>
-                )
-              })}
+                  )
+                })}
             </div>
           </div>
 
@@ -172,7 +176,7 @@ export default function DashboardPage() {
                   <div key={skill} className="flex items-center gap-2">
                     <span className="text-xs text-slate-600 w-24 truncate capitalize">{skill}</span>
                     <div className="flex-1 h-1.5 bg-slate-100 rounded-full">
-                      <div className="h-full bg-sky-400 rounded-full" style={{ width: `${(count/maxSkill)*100}%` }} />
+                      <div className="h-full bg-sky-400 rounded-full" style={{ width: `${(count / maxSkill) * 100}%` }} />
                     </div>
                     <span className="text-xs font-semibold text-slate-400 w-5 text-right">{count}</span>
                   </div>
@@ -201,8 +205,8 @@ export default function DashboardPage() {
                       <p className="text-xs font-semibold text-slate-700 truncate">{c.name}</p>
                       {c.currentRole && <p className="text-xs text-slate-400 truncate">{c.currentRole}</p>}
                     </div>
-                    <span className={clsx("status-pill text-xs shrink-0", STATUS_COLORS[c.status as any])}>
-                      {STATUS_LABELS[c.status as any]}
+                    <span className={clsx("status-pill text-xs shrink-0", STATUS_COLORS[c.status as Status])}>
+                      {STATUS_LABELS[c.status as Status]}
                     </span>
                   </Link>
                 ))}
@@ -225,7 +229,7 @@ export default function DashboardPage() {
                   <p className="text-3xl font-bold text-slate-900 tabular-nums">{val ? (val as number).toFixed(1) : "—"}</p>
                   <p className="text-sm text-slate-500 mt-1">{label as string}</p>
                   <div className="mt-2 h-2 bg-slate-100 rounded-full overflow-hidden mx-4">
-                    <div className="h-full bg-sky-500 rounded-full" style={{ width: `${val ? ((val as number)/10)*100 : 0}%` }} />
+                    <div className="h-full bg-sky-500 rounded-full" style={{ width: `${val ? ((val as number) / 10) * 100 : 0}%` }} />
                   </div>
                 </div>
               ))}
