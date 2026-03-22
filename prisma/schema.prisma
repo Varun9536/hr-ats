@@ -1,0 +1,289 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  password      String    // bcrypt hashed
+  role          UserRole  @default(RECRUITER)
+  avatar        String?
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  sessions      Session[]
+  auditLogs     AuditLog[]
+  notes         CandidateNote[]
+  interviews    Interview[]
+  createdCandidates Candidate[] @relation("CreatedBy")
+  assignedCandidates Candidate[] @relation("AssignedTo")
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  RECRUITER
+  INTERVIEWER
+  VIEWER
+}
+
+// ─── Jobs ────────────────────────────────────────────────────────────────────
+
+model Job {
+  id            String    @id @default(cuid())
+  title         String
+  department    String?
+  location      String?
+  type          JobType   @default(FULL_TIME)
+  description   String?
+  requirements  String?
+  requiredSkills String[]
+  minExperience Int?      // years
+  salaryMin     Int?
+  salaryMax     Int?
+  isActive      Boolean   @default(true)
+  openings      Int       @default(1)
+  closingDate   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  candidates    Candidate[]
+
+  @@map("jobs")
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  REMOTE
+}
+
+// ─── Candidates ──────────────────────────────────────────────────────────────
+
+model Candidate {
+  id                  String      @id @default(cuid())
+  name                String
+  email               String      @unique
+  phone               String?
+  location            String?
+  linkedIn            String?
+  portfolio           String?
+  currentCompany      String?
+  currentRole         String?
+  experienceYears     Int?
+  expectedSalary      Int?
+  noticePeriod        String?     // e.g. "30 days", "Immediate"
+  resumePath          String?
+  resumeText          String?     @db.Text
+  skills              String[]
+  status              Status      @default(APPLIED)
+  callStatus          CallStatus  @default(NOT_CALLED)
+  source              Source      @default(DIRECT)
+  priority            Priority    @default(MEDIUM)
+
+  // Scores 0–10
+  technicalScore      Float?
+  communicationScore  Float?
+  cultureFitScore     Float?
+  overallScore        Float?
+
+  // Relations
+  jobId               String?
+  job                 Job?        @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  createdById         String?
+  createdBy           User?       @relation("CreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  assignedToId        String?
+  assignedTo          User?       @relation("AssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  notes               CandidateNote[]
+  interviews          Interview[]
+  activityLog         ActivityLog[]
+  tags                CandidateTag[]
+
+  appliedAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@map("candidates")
+}
+
+model CandidateNote {
+  id          String   @id @default(cuid())
+  candidateId String
+  authorId    String
+  content     String   @db.Text
+  isPrivate   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@map("candidate_notes")
+}
+
+model Interview {
+  id            String          @id @default(cuid())
+  candidateId   String
+  interviewerId String
+  scheduledAt   DateTime
+  duration      Int             @default(60) // minutes
+  type          InterviewType   @default(TECHNICAL)
+  mode          InterviewMode   @default(VIDEO)
+  status        InterviewStatus @default(SCHEDULED)
+  feedback      String?         @db.Text
+  rating        Int?            // 1-5
+  meetingLink   String?
+  notes         String?         @db.Text
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  interviewer User      @relation(fields: [interviewerId], references: [id], onDelete: Cascade)
+
+  @@map("interviews")
+}
+
+model Tag {
+  id         String         @id @default(cuid())
+  name       String         @unique
+  color      String         @default("#6366f1")
+  createdAt  DateTime       @default(now())
+  candidates CandidateTag[]
+
+  @@map("tags")
+}
+
+model CandidateTag {
+  candidateId String
+  tagId       String
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  tag       Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([candidateId, tagId])
+  @@map("candidate_tags")
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  candidateId String
+  action      String
+  details     String?
+  performedBy String?
+  createdAt   DateTime @default(now())
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@map("activity_logs")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  resource   String
+  resourceId String?
+  details    Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Status {
+  APPLIED
+  SCREENING
+  SHORTLISTED
+  INTERVIEW
+  OFFER
+  SELECTED
+  REJECTED
+  WITHDRAWN
+  ON_HOLD
+}
+
+enum CallStatus {
+  NOT_CALLED
+  SCHEDULED
+  CALLED
+  NOT_PICKED
+  CALLBACK_REQUESTED
+  VOICEMAIL_LEFT
+}
+
+enum Source {
+  DIRECT
+  LINKEDIN
+  NAUKRI
+  REFERRAL
+  CAMPUS
+  AGENCY
+  WEBSITE
+  OTHER
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum InterviewType {
+  SCREENING
+  TECHNICAL
+  HR
+  CULTURE_FIT
+  FINAL
+  ASSIGNMENT
+}
+
+enum InterviewMode {
+  IN_PERSON
+  VIDEO
+  PHONE
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+  NO_SHOW
+}
