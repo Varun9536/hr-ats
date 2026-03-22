@@ -1,6 +1,7 @@
 FROM node:24-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
+COPY prisma ./prisma   # ✅ FIX
 RUN npm ci
 
 FROM node:24-alpine AS builder
