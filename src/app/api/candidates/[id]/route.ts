@@ -35,15 +35,19 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         orderBy: { createdAt: "desc" },
         take: 20,
       },
-      applications: {
-        include: { job: { select: { id: true, title: true, department: true } } },
-        orderBy: { appliedAt: "asc" },
-      },
     },
   })
 
   if (!candidate) return err("Candidate not found", 404)
-  return ok(candidate)
+
+  // Fetch job applications separately — safe if migration hasn't run yet
+  const applications = await prisma.jobApplication.findMany({
+    where: { candidateId: id },
+    include: { job: { select: { id: true, title: true, department: true } } },
+    orderBy: { appliedAt: "asc" },
+  }).catch(() => [])
+
+  return ok({ ...candidate, applications })
 }
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {

@@ -1,0 +1,10 @@
+Request URL
+https://ats.varunkumar.online/api/candidates/cmn1clo6d000gqq382n24oe2v
+Request Method
+GET
+Status Code
+500 Internal Server Error
+Remote Address
+135.125.191.236:443
+Referrer Policy
+strict-origin-when-cross-origin
