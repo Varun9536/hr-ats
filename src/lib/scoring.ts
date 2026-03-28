@@ -29,7 +29,7 @@ export interface ATSScoreResult {
     experienceMatch: number
     skillDepth: number
     profileCompleteness: number
-    seniorityBonus: number
+    seniorityScore: number    // 0-10 scale, contributes 5% to technical
   }
   summary: string
   strengths: string[]
@@ -79,10 +79,11 @@ export function calculateATSScore(input: ScoringInput): ATSScoreResult {
 
   const skillsLower = skills.map(s => s.toLowerCase())
   const requiredLower = jobRequiredSkills.map(s => s.toLowerCase())
+  const resumeTextLower = (resumeText || "").toLowerCase()
 
   // ── 1. SKILL MATCH SCORE (0-10) ───────────────────────────────────────────
-  let skillMatchScore = 5.0 // default when no job linked
-  let skillMatchPercent = 50
+  let skillMatchScore = 0
+  let skillMatchPercent = 0
   let matchedSkills: string[] = []
   let missingSkills: string[] = []
 
@@ -96,9 +97,10 @@ export function calculateATSScore(input: ScoringInput): ATSScoreResult {
     skillMatchPercent = pct((matchedSkills.length / requiredLower.length) * 100)
     skillMatchScore = clamp((matchedSkills.length / requiredLower.length) * 10)
   } else {
-    // No job — score based on total skill count
-    skillMatchPercent = pct(Math.min(100, (skills.length / 15) * 100))
-    skillMatchScore = clamp(Math.min(10, 3 + (skills.length / 15) * 7))
+    // No job linked — score based on skill count, but cap at 7 to avoid inflated no-context scores
+    const skillCount = skills.length
+    skillMatchPercent = pct(Math.min(100, (skillCount / 12) * 100))
+    skillMatchScore = clamp(Math.min(7, 2 + (skillCount / 12) * 5))
   }
 
   // ── 2. EXPERIENCE MATCH SCORE (0-10) ─────────────────────────────────────
@@ -121,7 +123,6 @@ export function calculateATSScore(input: ScoringInput): ATSScoreResult {
   }
 
   // ── 3. SKILL DEPTH SCORE (0-10) ──────────────────────────────────────────
-  // Weighted by skill value
   let weightedSkillCount = 0
   for (const skill of skillsLower) {
     const weight = SKILL_WEIGHTS[skill] ?? 1.0
@@ -138,7 +139,6 @@ export function calculateATSScore(input: ScoringInput): ATSScoreResult {
   else skillDepthScore = 3.0
 
   // ── 4. PROFILE COMPLETENESS (0-10) ───────────────────────────────────────
-  let completenessScore = 0
   let completenessPoints = 0
   const maxPoints = 10
 
@@ -151,66 +151,106 @@ export function calculateATSScore(input: ScoringInput): ATSScoreResult {
   if (experienceYears != null) completenessPoints += 1.0
   if (skills.length > 0) completenessPoints += 1.0
 
-  completenessScore = clamp((completenessPoints / maxPoints) * 10)
+  const completenessScore = clamp((completenessPoints / maxPoints) * 10)
 
-  // ── 5. SENIORITY BONUS ────────────────────────────────────────────────────
-  let seniorityBonus = 0
+  // ── 5. SENIORITY SCORE (0-10) ─────────────────────────────────────────────
+  // Normalized 0-10 scale; contributes 5% weight to technical score
+  let seniorityScore = 0
   const roleText = (currentRole || "").toLowerCase()
-  const resumeTextLower = (resumeText || "").toLowerCase()
 
-  if (/senior|lead|principal|architect|head|director|vp|chief/i.test(roleText)) seniorityBonus = 1.0
-  else if (/mid|intermediate|engineer|developer/i.test(roleText)) seniorityBonus = 0.5
-  else if (/junior|fresher|trainee|intern/i.test(roleText)) seniorityBonus = 0
+  if (/senior|lead|principal|architect|head|director|vp|chief/i.test(roleText)) seniorityScore = 10.0
+  else if (/mid|intermediate|engineer|developer/i.test(roleText)) seniorityScore = 6.0
+  else if (/junior|fresher|trainee|intern/i.test(roleText)) seniorityScore = 2.0
+  else seniorityScore = 4.0 // unknown/unlabelled
 
-  // Check resume for leadership indicators
+  // Check resume for leadership indicators — can boost up
   if (/led\s+team|managed\s+team|team\s+of\s+\d|mentored|architected/i.test(resumeTextLower)) {
-    seniorityBonus = Math.max(seniorityBonus, 0.8)
+    seniorityScore = Math.max(seniorityScore, 8.0)
   }
 
   // ── COMPUTE FINAL SCORES ──────────────────────────────────────────────────
 
-  // Technical Score — weighted combination
+  // Technical Score — weighted combination (weights sum to 1.0)
   const technicalScore = clamp(
-    (skillMatchScore * 0.40) +
-    (experienceScore * 0.30) +
-    (skillDepthScore * 0.20) +
-    (seniorityBonus * 1.0) +
-    (completenessScore * 0.10)
+    (skillMatchScore   * 0.40) +
+    (experienceScore   * 0.30) +
+    (skillDepthScore   * 0.20) +
+    (seniorityScore    * 0.05) +
+    (completenessScore * 0.05)
   )
 
-  // Communication Score — profile quality indicators
-  const communicationScore = clamp(
-    (completenessScore * 0.50) +
-    (linkedIn ? 2.0 : 0) +
-    (portfolio ? 1.5 : 0) +
-    (phone ? 1.0 : 0) +
-    (noticePeriod ? 0.5 : 0) +
-    (exp >= 2 ? 1.0 : 0.5)
-  )
+  // Communication Score — based on professional communication signals in resume
+  // + professional presence indicators
+  let communicationScore = 0
 
-  // Culture Fit Score — stability + completeness + reasonable expectations
-  let cultureFitScore = 5.0
-  cultureFitScore += completenessScore * 0.3
-  cultureFitScore += (exp >= 1 ? 1.0 : 0)
-  cultureFitScore += (currentCompany ? 0.5 : 0)
-  if (noticePeriod) {
-    if (/immediate|0|zero/i.test(noticePeriod)) cultureFitScore += 1.0
-    else if (/15|30/i.test(noticePeriod)) cultureFitScore += 0.8
-    else if (/60/i.test(noticePeriod)) cultureFitScore += 0.5
-    else if (/90/i.test(noticePeriod)) cultureFitScore += 0.2
-  }
-  // Salary expectation check
+  // Resume communication keywords (up to 3 points)
+  const commKeywords = [
+    "communication", "presentation", "stakeholder", "client-facing", "negotiation",
+    "collaboration", "mentor", "training", "facilitat", "coordinat",
+    "public speaking", "documentation", "cross-functional", "team lead", "reporting",
+  ]
+  const commHits = commKeywords.filter(k => resumeTextLower.includes(k)).length
+  communicationScore += Math.min(3.0, commHits * 0.4)
+
+  // Professional online presence (up to 3 points)
+  if (linkedIn)   communicationScore += 1.5
+  if (portfolio)  communicationScore += 1.0
+  if (phone)      communicationScore += 0.5
+
+  // Experience implies communication growth (up to 2 points)
+  if (exp >= 5)      communicationScore += 2.0
+  else if (exp >= 3) communicationScore += 1.5
+  else if (exp >= 1) communicationScore += 1.0
+  else               communicationScore += 0.3
+
+  // Profile completeness as communication of professionalism (up to 2 points)
+  communicationScore += completenessScore * 0.2
+
+  communicationScore = clamp(communicationScore)
+
+  // Culture Fit Score — measures salary fit, availability, and role stability
+  // (previously misleadingly named; this is job-fit/availability score)
+  let cultureFitScore = 3.5 // realistic baseline — not everyone fits by default
+
+  // Salary expectation vs budget (up to 2.5 points)
   if (jobSalaryMax && input.expectedSalary) {
-    if (input.expectedSalary <= jobSalaryMax) cultureFitScore += 1.0
+    if (input.expectedSalary <= jobSalaryMax)            cultureFitScore += 2.5
+    else if (input.expectedSalary <= jobSalaryMax * 1.1) cultureFitScore += 1.5
     else if (input.expectedSalary <= jobSalaryMax * 1.2) cultureFitScore += 0.5
+    // Over 20% above budget: no points added
+  } else if (!jobSalaryMax) {
+    // No job budget defined — neutral, add profile completeness proxy
+    cultureFitScore += completenessScore * 0.2
   }
+
+  // Notice period / availability (up to 1.5 points)
+  if (noticePeriod) {
+    if (/immediate|0|zero/i.test(noticePeriod))  cultureFitScore += 1.5
+    else if (/15|30/i.test(noticePeriod))         cultureFitScore += 1.2
+    else if (/60/i.test(noticePeriod))            cultureFitScore += 0.8
+    else if (/90/i.test(noticePeriod))            cultureFitScore += 0.3
+  }
+
+  // Stability & commitment signals (up to 1.5 points)
+  if (currentCompany) cultureFitScore += 0.5
+  if (exp >= 1)       cultureFitScore += 0.5
+  if (exp >= 3)       cultureFitScore += 0.5
+
+  // Resume stability keywords (up to 1 point)
+  const stabilityKeywords = [
+    "long-term", "growth", "team player", "collaborative", "reliable",
+    "consistent", "committed", "ownership", "initiative",
+  ]
+  const stabilityHits = stabilityKeywords.filter(k => resumeTextLower.includes(k)).length
+  cultureFitScore += Math.min(1.0, stabilityHits * 0.3)
+
   cultureFitScore = clamp(cultureFitScore)
 
   // Overall Score — weighted average
   const overallScore = clamp(
-    (technicalScore * 0.50) +
+    (technicalScore     * 0.50) +
     (communicationScore * 0.25) +
-    (cultureFitScore * 0.25)
+    (cultureFitScore    * 0.25)
   )
 
   // ── STRENGTHS & GAPS ─────────────────────────────────────────────────────
@@ -225,7 +265,8 @@ export function calculateATSScore(input: ScoringInput): ATSScoreResult {
   if (linkedIn) strengths.push("LinkedIn profile present")
   if (portfolio) strengths.push("Portfolio/website present")
   if (/immediate|0|30/i.test(noticePeriod || "")) strengths.push("Short notice period — quick joiner")
-  if (seniorityBonus >= 0.8) strengths.push("Senior-level experience")
+  if (seniorityScore >= 8) strengths.push("Senior-level experience")
+  if (commHits >= 3) strengths.push("Strong communication indicators in resume")
 
   if (missingSkills.length > 0) gaps.push(`Missing required skills: ${missingSkills.slice(0, 4).join(", ")}`)
   if (exp < (jobMinExperience ?? 0)) gaps.push(`Experience gap: ${exp} yrs vs ${jobMinExperience} yrs required`)
@@ -235,10 +276,12 @@ export function calculateATSScore(input: ScoringInput): ATSScoreResult {
 
   // ── SUMMARY ──────────────────────────────────────────────────────────────
   let scoreLevel = ""
-  if (overallScore >= 8.5) scoreLevel = "Excellent"
+  if (overallScore >= 8.5)      scoreLevel = "Excellent"
   else if (overallScore >= 7.0) scoreLevel = "Good"
   else if (overallScore >= 5.5) scoreLevel = "Average"
-  else scoreLevel = "Below Average"
+  else                           scoreLevel = "Below Average"
+
+  const commHits2 = commKeywords.filter(k => resumeTextLower.includes(k)).length // recompute for closure
 
   const summary = `${scoreLevel} candidate. ${
     requiredLower.length > 0
@@ -255,11 +298,11 @@ export function calculateATSScore(input: ScoringInput): ATSScoreResult {
     overallScore,
     skillMatchPercent,
     breakdown: {
-      skillMatch: clamp(skillMatchScore),
-      experienceMatch: clamp(experienceScore),
-      skillDepth: clamp(skillDepthScore),
-      profileCompleteness: clamp(completenessScore),
-      seniorityBonus: clamp(seniorityBonus * 10),
+      skillMatch:           clamp(skillMatchScore),
+      experienceMatch:      clamp(experienceScore),
+      skillDepth:           clamp(skillDepthScore),
+      profileCompleteness:  clamp(completenessScore),
+      seniorityScore:       clamp(seniorityScore),
     },
     summary,
     strengths,

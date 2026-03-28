@@ -71,7 +71,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <label className={labelCls}>Email Address</label>
-              <input className={inputCls} value={user?.email || ""} disabled className="ats-input text-sm py-2.5 bg-slate-50 text-slate-400 cursor-not-allowed" />
+              <input value={user?.email || ""} disabled className="ats-input text-sm py-2.5 bg-slate-50 text-slate-400 cursor-not-allowed" />
               <p className="text-xs text-slate-400 mt-1">Contact an admin to change your email.</p>
             </div>
           </div>

@@ -84,7 +84,30 @@ export async function POST(req: NextRequest) {
   const { position, ...data } = parsed.data as any
 
   const existing = await prisma.candidate.findUnique({ where: { email: data.email } })
-  if (existing) return err("A candidate with this email already exists", 409)
+
+  // If candidate already exists and a new job is provided, create a JobApplication instead of erroring
+  if (existing) {
+    if (!data.jobId) {
+      return err("A candidate with this email already exists", 409)
+    }
+    // Check if they've already applied to this specific job
+    const alreadyApplied = await prisma.jobApplication.findUnique({
+      where: { candidateId_jobId: { candidateId: existing.id, jobId: data.jobId } },
+    })
+    if (alreadyApplied) {
+      return err("This candidate has already applied for that job", 409)
+    }
+    // Create the additional application record
+    const application = await prisma.jobApplication.create({
+      data: { candidateId: existing.id, jobId: data.jobId },
+      include: { job: { select: { id: true, title: true } } },
+    })
+    await audit("CANDIDATE_APPLIED_JOB", "candidates", {
+      userId: session.id, resourceId: existing.id,
+      details: { jobId: data.jobId } as any,
+    })
+    return ok({ candidate: existing, application, alreadyExisted: true }, 200)
+  }
 
   // Fetch job for scoring context if jobId provided
   const job = data.jobId ? await prisma.job.findUnique({ where: { id: data.jobId } }) : null
@@ -113,6 +136,13 @@ export async function POST(req: NextRequest) {
       overallScore: score.overallScore,
     },
   })
+
+  // Create primary JobApplication record if job was specified
+  if (data.jobId) {
+    await prisma.jobApplication.create({
+      data: { candidateId: candidate.id, jobId: data.jobId },
+    }).catch(() => {}) // non-fatal
+  }
 
   await audit("CANDIDATE_CREATED", "candidates", { userId: session.id, resourceId: candidate.id })
   return ok({ ...candidate, atsScore: score }, 201)

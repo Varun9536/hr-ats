@@ -35,6 +35,10 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         orderBy: { createdAt: "desc" },
         take: 20,
       },
+      applications: {
+        include: { job: { select: { id: true, title: true, department: true } } },
+        orderBy: { appliedAt: "asc" },
+      },
     },
   })
 

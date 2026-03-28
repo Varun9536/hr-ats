@@ -18,7 +18,7 @@ export async function audit(
         action,
         resource,
         resourceId: options.resourceId,
-        details: options.details,
+        details: options.details as object | undefined,
         ipAddress: options.ipAddress,
       },
     })

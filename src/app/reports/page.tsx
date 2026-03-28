@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react"
 import AppShell from "@/components/AppShell"
 import { Download, RefreshCw } from "lucide-react"
+import type { Status } from "@/types"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line } from "recharts"
 import { STATUS_LABELS } from "@/types"
 import { clsx } from "clsx"
@@ -24,7 +25,7 @@ export default function ReportsPage() {
 
   const statusData = Object.entries(data.totals)
     .filter(([k]) => ["applied","screening","shortlisted","interview","offer","selected","rejected"].includes(k))
-    .map(([key, val]) => ({ name: STATUS_LABELS[key.toUpperCase() as any] || key, value: val as number }))
+    .map(([key, val]) => ({ name: STATUS_LABELS[key.toUpperCase() as Status] || key, value: val as number }))
     .filter(d => d.value > 0)
 
   const sourceData = data.sourceBreakdown.map((s: any) => ({ name: s.source, value: s.count }))

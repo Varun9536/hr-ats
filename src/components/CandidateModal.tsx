@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import { X, Save, Trash2, ExternalLink, Lock, Clock, Phone, Linkedin, Globe, Send, Brain, RefreshCw } from "lucide-react"
-import { Candidate, STATUS_LABELS, STATUS_COLORS, CALL_STATUS_LABELS, CALL_STATUS_COLORS, ALL_STATUSES, ALL_CALL_STATUSES, ALL_SOURCES, ALL_PRIORITIES, SOURCE_LABELS } from "@/types"
+import { Candidate, JobApplication, STATUS_LABELS, STATUS_COLORS, CALL_STATUS_LABELS, CALL_STATUS_COLORS, ALL_STATUSES, ALL_CALL_STATUSES, ALL_SOURCES, ALL_PRIORITIES, SOURCE_LABELS } from "@/types"
 import { ScoreBar, ScoreBadge } from "./ScoreBadge"
 import { clsx } from "clsx"
 import { useAuth } from "@/hooks/useAuth"
@@ -329,11 +329,25 @@ export default function CandidateModal({ candidateId, matchedSkills, onClose, on
                 </div>
               )}
 
-              {/* Job */}
-              {!editing && candidate.job && (
-                <div className="flex items-center gap-2 text-sm bg-sky-50 text-sky-700 px-3 py-2 rounded-lg">
-                  <BriefcaseIcon size={13} />
-                  Applied for: <strong>{candidate.job.title}</strong>
+              {/* Job Applications */}
+              {!editing && (candidate.job || (candidate.applications && candidate.applications.length > 0)) && (
+                <div className="space-y-1.5">
+                  {candidate.job && (
+                    <div className="flex items-center gap-2 text-sm bg-sky-50 text-sky-700 px-3 py-2 rounded-lg">
+                      <BriefcaseIcon size={13} />
+                      <span>Primary: <strong>{candidate.job.title}</strong>{candidate.job.department ? ` · ${candidate.job.department}` : ""}</span>
+                    </div>
+                  )}
+                  {candidate.applications && candidate.applications
+                    .filter(a => a.jobId !== candidate.jobId)
+                    .map((a: JobApplication) => (
+                      <div key={a.id} className="flex items-center gap-2 text-sm bg-slate-50 text-slate-600 px-3 py-2 rounded-lg border border-slate-100">
+                        <BriefcaseIcon size={13} className="text-slate-400" />
+                        <span>Also applied: <strong>{a.job?.title ?? a.jobId}</strong>{a.job?.department ? ` · ${a.job.department}` : ""}</span>
+                        <span className="ml-auto text-xs text-slate-400">{new Date(a.appliedAt).toLocaleDateString()}</span>
+                      </div>
+                    ))
+                  }
                 </div>
               )}
 

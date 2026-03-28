@@ -40,9 +40,9 @@ services:
     networks:
       - autohire-network
 
-  seed:
+  migrate:
     image: node:24-alpine
-    container_name: autohire-seed
+    container_name: autohire-migrate
     working_dir: /app
     volumes:
       - .:/app
@@ -51,9 +51,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: sh -c "npm ci && npx prisma migrate deploy && npx tsx prisma/seed.ts"
+    # Install psql for the smart migration script, then run migrations + seed
+    command: >
+      sh -c "
+        apk add --no-cache postgresql-client &&
+        npm ci --ignore-scripts &&
+        npx prisma generate &&
+        sh prisma/migrate.sh &&
+        npx tsx prisma/seed.ts
+      "
     networks:
-      - autohire-network   
+      - autohire-network
 
 volumes:
   postgres_data:

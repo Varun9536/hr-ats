@@ -107,6 +107,9 @@ export async function POST(req: NextRequest) {
   const existing = await prisma.candidate.findUnique({ where: { email: parsed.email } })
 
   if (existing) {
+    // Update resume/profile data but DO NOT overwrite the primary jobId —
+    // that would silently remove the candidate's original job association.
+    // If a new job is specified, create a JobApplication record instead.
     const updated = await prisma.candidate.update({
       where: { email: parsed.email },
       data: {
@@ -118,7 +121,7 @@ export async function POST(req: NextRequest) {
         ...(parsed.linkedIn && { linkedIn: parsed.linkedIn }),
         ...(parsed.experienceYears && { experienceYears: parsed.experienceYears }),
         ...(position && { currentRole: position }),
-        ...(jobId && { jobId }),
+        // Intentionally NOT updating jobId — use JobApplication for additional jobs
         // Auto-update scores
         technicalScore: score.technicalScore,
         communicationScore: score.communicationScore,
@@ -126,6 +129,17 @@ export async function POST(req: NextRequest) {
         overallScore: score.overallScore,
       },
     })
+
+    // If a job is specified and it differs from the candidate's primary job,
+    // track it as an additional application (no-op if already exists)
+    if (jobId && jobId !== existing.jobId) {
+      await prisma.jobApplication.upsert({
+        where: { candidateId_jobId: { candidateId: existing.id, jobId } },
+        create: { candidateId: existing.id, jobId },
+        update: {},
+      })
+    }
+
     await audit("RESUME_UPLOADED", "candidates", { userId: session.id, resourceId: updated.id, details: { updated: true } })
     return ok({ candidate: updated, updated: true, score })
   }
@@ -150,6 +164,13 @@ export async function POST(req: NextRequest) {
       overallScore: score.overallScore,
     },
   })
+
+  // Create primary JobApplication record
+  if (jobId) {
+    await prisma.jobApplication.create({
+      data: { candidateId: candidate.id, jobId },
+    }).catch(() => {}) // non-fatal
+  }
 
   await audit("RESUME_UPLOADED", "candidates", { userId: session.id, resourceId: candidate.id, details: { new: true } })
   return ok({ candidate, updated: false, score }, 201)

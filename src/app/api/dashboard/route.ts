@@ -50,7 +50,7 @@ export async function GET() {
       take: 5,
     }),
     prisma.candidate.aggregate({
-      _avg: { technicalScore: true, communicationScore: true, overallScore: true },
+      _avg: { technicalScore: true, communicationScore: true, cultureFitScore: true, overallScore: true },
     }),
     prisma.candidate.groupBy({
       by: ["source"],

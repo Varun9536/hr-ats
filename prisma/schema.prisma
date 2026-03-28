@@ -76,6 +76,7 @@ model Job {
   updatedAt     DateTime  @updatedAt
 
   candidates    Candidate[]
+  applications  JobApplication[]
 
   @@map("jobs")
 }
@@ -131,11 +132,26 @@ model Candidate {
   interviews          Interview[]
   activityLog         ActivityLog[]
   tags                CandidateTag[]
+  applications        JobApplication[]
 
   appliedAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
   @@map("candidates")
+}
+
+// Tracks additional job applications for a candidate (beyond their primary jobId)
+model JobApplication {
+  id          String   @id @default(cuid())
+  candidateId String
+  jobId       String
+  appliedAt   DateTime @default(now())
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  job       Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([candidateId, jobId])
+  @@map("job_applications")
 }
 
 model CandidateNote {

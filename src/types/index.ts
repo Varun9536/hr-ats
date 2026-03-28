@@ -42,12 +42,21 @@ export interface Candidate {
   overallScore?: number | null
   jobId?: string | null
   assignedToId?: string | null
-  job?: { id: string; title: string } | null
+  job?: { id: string; title: string; department?: string | null } | null
   assignedTo?: { id: string; name: string; avatar?: string | null } | null
   tags?: { tag: { id: string; name: string; color: string } }[]
   _count?: { notes: number; interviews: number }
+  applications?: JobApplication[]
   appliedAt: string
   updatedAt: string
+}
+
+export interface JobApplication {
+  id: string
+  candidateId: string
+  jobId: string
+  job?: { id: string; title: string; department?: string | null }
+  appliedAt: string
 }
 
 export interface Job {
