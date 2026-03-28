@@ -83,19 +83,29 @@ export async function POST(req: NextRequest) {
 
   const { position, ...data } = parsed.data as any
 
-  const existing = await prisma.candidate.findUnique({ where: { email: data.email } })
+  const [existing, phoneMatch] = await Promise.all([
+    prisma.candidate.findUnique({ where: { email: data.email } }),
+    data.phone ? prisma.candidate.findFirst({
+      where: { phone: data.phone },
+      select: { id: true, name: true, email: true, status: true, phone: true },
+    }) : null,
+  ])
 
   // If candidate already exists and a new job is provided, create a JobApplication instead of erroring
   if (existing) {
     if (!data.jobId) {
-      return err("A candidate with this email already exists", 409)
+      return err("duplicate_email", 409, {
+        duplicate: { id: existing.id, name: existing.name, email: existing.email, status: existing.status },
+      })
     }
     // Check if they've already applied to this specific job
     const alreadyApplied = await prisma.jobApplication.findUnique({
       where: { candidateId_jobId: { candidateId: existing.id, jobId: data.jobId } },
     })
     if (alreadyApplied) {
-      return err("This candidate has already applied for that job", 409)
+      return err("duplicate_email", 409, {
+        duplicate: { id: existing.id, name: existing.name, email: existing.email, status: existing.status },
+      })
     }
     // Create the additional application record
     const application = await prisma.jobApplication.create({
@@ -145,5 +155,11 @@ export async function POST(req: NextRequest) {
   }
 
   await audit("CANDIDATE_CREATED", "candidates", { userId: session.id, resourceId: candidate.id })
-  return ok({ ...candidate, atsScore: score }, 201)
+
+  // Warn if another candidate has the same phone (not a blocker, just a heads-up)
+  const phoneWarning = phoneMatch && phoneMatch.id !== candidate.id
+    ? { id: phoneMatch.id, name: phoneMatch.name, email: phoneMatch.email, status: phoneMatch.status }
+    : null
+
+  return ok({ ...candidate, atsScore: score, phoneWarning }, 201)
 }

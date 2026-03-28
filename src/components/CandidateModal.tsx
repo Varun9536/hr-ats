@@ -7,7 +7,7 @@ import { clsx } from "clsx"
 import { useAuth } from "@/hooks/useAuth"
 
 interface Note { id: string; content: string; isPrivate: boolean; createdAt: string; author: { name: string; avatar?: string | null } }
-interface Interview { id: string; scheduledAt: string; type: string; mode: string; status: string; interviewer: { name: string } }
+interface Interview { id: string; scheduledAt: string; duration: number; type: string; mode: string; status: string; feedback?: string | null; rating?: number | null; meetingLink?: string | null; notes?: string | null; interviewer: { id: string; name: string } }
 
 interface Props {
   candidateId: string
@@ -448,21 +448,14 @@ export default function CandidateModal({ candidateId, matchedSkills, onClose, on
             <div className="space-y-3">
               {interviews.length === 0 && <p className="text-center text-slate-400 text-sm py-8">No interviews scheduled.</p>}
               {interviews.map(iv => (
-                <div key={iv.id} className="ats-card p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">{iv.type.replace("_"," ")} Interview</p>
-                      <p className="text-xs text-slate-500 mt-0.5">with {iv.interviewer.name} · {iv.mode}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-medium text-slate-700">{new Date(iv.scheduledAt).toLocaleDateString()}</p>
-                      <p className="text-xs text-slate-400">{new Date(iv.scheduledAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
-                      <span className={clsx("status-pill mt-1", iv.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" : iv.status === "CANCELLED" ? "bg-red-100 text-red-600" : "bg-blue-100 text-blue-700")}>
-                        {iv.status}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                <InterviewCard
+                  key={iv.id}
+                  interview={iv}
+                  candidateId={candidateId}
+                  currentUserId={user?.id}
+                  currentUserRole={user?.role}
+                  onUpdate={loadCandidate}
+                />
               ))}
             </div>
           )}
@@ -509,6 +502,159 @@ export default function CandidateModal({ candidateId, matchedSkills, onClose, on
           <span>Updated: {new Date(candidate.updatedAt).toLocaleDateString()}</span>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Interview Card with Feedback ─────────────────────────────────────────────
+function InterviewCard({ interview: iv, candidateId, currentUserId, currentUserRole, onUpdate }: {
+  interview: Interview
+  candidateId: string
+  currentUserId?: string
+  currentUserRole?: string
+  onUpdate: () => void
+}) {
+  const [showFeedback, setShowFeedback] = useState(false)
+  const [feedback, setFeedback] = useState(iv.feedback || "")
+  const [rating, setRating] = useState<number | null>(iv.rating ?? null)
+  const [saving, setSaving] = useState(false)
+
+  const canEdit = currentUserRole !== "VIEWER"
+  const isInterviewer = currentUserRole === "INTERVIEWER"
+  const isOwn = iv.interviewer.id === currentUserId
+  const canUpdate = canEdit && (!isInterviewer || isOwn)
+  const isPending = iv.status === "SCHEDULED" || iv.status === "RESCHEDULED"
+
+  const STATUS_BADGE: Record<string, string> = {
+    SCHEDULED: "bg-blue-100 text-blue-700",
+    COMPLETED: "bg-emerald-100 text-emerald-700",
+    CANCELLED: "bg-red-100 text-red-600",
+    RESCHEDULED: "bg-amber-100 text-amber-700",
+    NO_SHOW: "bg-slate-100 text-slate-500",
+  }
+
+  async function updateStatus(status: string) {
+    await fetch(`/api/candidates/${candidateId}/interviews/${iv.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    })
+    onUpdate()
+  }
+
+  async function submitFeedback() {
+    if (!feedback.trim()) return
+    setSaving(true)
+    await fetch(`/api/candidates/${candidateId}/interviews/${iv.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "COMPLETED", feedback, rating }),
+    })
+    setSaving(false)
+    setShowFeedback(false)
+    onUpdate()
+  }
+
+  return (
+    <div className="ats-card p-4 space-y-3">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-800">{iv.type.replace(/_/g, " ")} Interview</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            with {iv.interviewer.name} · {iv.mode.replace("_"," ")} · {iv.duration}min
+          </p>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {new Date(iv.scheduledAt).toLocaleDateString()} at {new Date(iv.scheduledAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </p>
+          {iv.meetingLink && (
+            <a href={iv.meetingLink} target="_blank" rel="noopener noreferrer"
+              className="text-xs text-sky-600 hover:underline mt-0.5 inline-block">
+              Join Meeting →
+            </a>
+          )}
+        </div>
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          <span className={clsx("status-pill", STATUS_BADGE[iv.status] || "bg-slate-100 text-slate-500")}>
+            {iv.status.replace("_"," ")}
+          </span>
+          {iv.rating && (
+            <span className="text-xs font-semibold text-amber-600">
+              {"★".repeat(iv.rating)}{"☆".repeat(5 - iv.rating)} {iv.rating}/5
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Existing feedback */}
+      {iv.feedback && (
+        <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Feedback</p>
+          <p className="text-sm text-slate-700 whitespace-pre-wrap">{iv.feedback}</p>
+        </div>
+      )}
+
+      {/* Action buttons for pending interviews */}
+      {canUpdate && isPending && (
+        <div className="flex gap-2 flex-wrap pt-1 border-t border-slate-100">
+          <button onClick={() => setShowFeedback(s => !s)}
+            className="text-xs px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg font-semibold hover:bg-emerald-100 transition-colors">
+            ✓ Complete + Feedback
+          </button>
+          <button onClick={() => updateStatus("NO_SHOW")}
+            className="text-xs px-3 py-1.5 bg-slate-50 text-slate-600 border border-slate-200 rounded-lg font-semibold hover:bg-slate-100 transition-colors">
+            No Show
+          </button>
+          <button onClick={() => updateStatus("CANCELLED")}
+            className="text-xs px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg font-semibold hover:bg-red-100 transition-colors">
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Add feedback to completed interview without feedback */}
+      {canUpdate && iv.status === "COMPLETED" && !iv.feedback && (
+        <div className="pt-1 border-t border-slate-100">
+          <button onClick={() => setShowFeedback(s => !s)}
+            className="text-xs px-3 py-1.5 bg-sky-50 text-sky-700 border border-sky-200 rounded-lg font-semibold hover:bg-sky-100 transition-colors">
+            + Add Feedback
+          </button>
+        </div>
+      )}
+
+      {/* Feedback form */}
+      {showFeedback && (
+        <div className="space-y-3 pt-2 border-t border-slate-100 fade-in">
+          <div>
+            <p className="text-xs font-semibold text-slate-600 mb-1.5">Rating</p>
+            <div className="flex gap-1">
+              {[1,2,3,4,5].map(n => (
+                <button key={n} onClick={() => setRating(n)}
+                  className={clsx("w-8 h-8 rounded-lg text-sm font-bold border transition-colors",
+                    rating && rating >= n
+                      ? "bg-amber-400 border-amber-500 text-white"
+                      : "bg-slate-50 border-slate-200 text-slate-400 hover:border-amber-300")}>
+                  {n}
+                </button>
+              ))}
+              {rating && <button onClick={() => setRating(null)} className="text-xs text-slate-400 ml-1 hover:text-slate-600">clear</button>}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-600 mb-1.5">Feedback</p>
+            <textarea rows={4} className="ats-input resize-none text-sm w-full"
+              placeholder="Write your interview feedback here…"
+              value={feedback} onChange={e => setFeedback(e.target.value)} />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={submitFeedback} disabled={saving || !feedback.trim()}
+              className="btn-primary text-xs py-1.5 disabled:opacity-50">
+              <Save size={12} />{saving ? "Saving…" : "Submit Feedback"}
+            </button>
+            <button onClick={() => setShowFeedback(false)} className="btn-secondary text-xs py-1.5">Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

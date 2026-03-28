@@ -3,20 +3,28 @@ import { useEffect, useState, useCallback, useRef } from "react"
 import AppShell from "@/components/AppShell"
 import CandidateModal from "@/components/CandidateModal"
 import { ScoreBadge } from "@/components/ScoreBadge"
-import { Search, SlidersHorizontal, ChevronUp, ChevronDown, Plus, X, Download, RefreshCw, UserPlus, Filter } from "lucide-react"
+import { Search, ChevronUp, ChevronDown, X, Download, RefreshCw, UserPlus, Filter, LayoutGrid, List } from "lucide-react"
 import { Candidate, Status, CallStatus, STATUS_LABELS, STATUS_COLORS, CALL_STATUS_LABELS, CALL_STATUS_COLORS, PRIORITY_COLORS, ALL_STATUSES, ALL_CALL_STATUSES, ALL_SOURCES, ALL_PRIORITIES, SOURCE_LABELS } from "@/types"
+import KanbanBoard from "@/components/KanbanBoard"
 import { clsx } from "clsx"
 import { useSearchParams } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
 
-function AddModal({ onClose, onAdded, jobs }: { onClose: () => void; onAdded: () => void; jobs: any[] }) {
+function AddModal({ onClose, onAdded, jobs, onViewDuplicate }: {
+  onClose: () => void
+  onAdded: () => void
+  jobs: any[]
+  onViewDuplicate: (id: string) => void
+}) {
   const [form, setForm] = useState({ name: "", email: "", phone: "", currentRole: "", location: "", source: "DIRECT", jobId: "", skills: "" })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
+  const [duplicate, setDuplicate] = useState<{ id: string; name: string; email: string; status: string } | null>(null)
+  const [phoneWarning, setPhoneWarning] = useState<{ id: string; name: string; email: string } | null>(null)
 
   async function handleSubmit() {
     if (!form.name || !form.email) { setError("Name and email are required"); return }
-    setSaving(true); setError("")
+    setSaving(true); setError(""); setDuplicate(null); setPhoneWarning(null)
     const res = await fetch("/api/candidates", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -24,8 +32,14 @@ function AddModal({ onClose, onAdded, jobs }: { onClose: () => void; onAdded: ()
     })
     const data = await res.json()
     setSaving(false)
-    if (!res.ok) { setError(data.error || "Failed"); return }
-    onAdded(); onClose()
+    if (res.status === 409 && data.details?.duplicate) {
+      setDuplicate(data.details.duplicate)
+      return
+    }
+    if (!res.ok) { setError(data.error || "Failed to add candidate"); return }
+    if (data.phoneWarning) setPhoneWarning(data.phoneWarning)
+    onAdded()
+    if (!data.phoneWarning) onClose()
   }
 
   return (
@@ -36,38 +50,75 @@ function AddModal({ onClose, onAdded, jobs }: { onClose: () => void; onAdded: ()
           <h2 className="text-lg font-bold text-slate-900">Add Candidate</h2>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg"><X size={16} /></button>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          {[["name","Full Name *","text"],["email","Email *","email"],["phone","Phone","tel"],["currentRole","Current Role","text"],["location","Location","text"]].map(([key, lbl, type]) => (
-            <div key={key} className={key === "email" || key === "location" ? "col-span-2" : ""}>
-              <label className="ats-label">{lbl}</label>
-              <input type={type} className="ats-input" value={(form as any)[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
-            </div>
-          ))}
-          <div>
-            <label className="ats-label">Source</label>
-            <select className="ats-input" value={form.source} onChange={e => setForm(f => ({ ...f, source: e.target.value }))}>
-              {ALL_SOURCES.map(s => <option key={s} value={s}>{SOURCE_LABELS[s]}</option>)}
-            </select>
+
+        {/* Duplicate email warning */}
+        {duplicate && (
+          <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-3">
+            <p className="text-xs font-bold text-amber-800 mb-1">⚠ Candidate already exists</p>
+            <p className="text-xs text-amber-700">
+              <strong>{duplicate.name}</strong> ({duplicate.email}) is already in the system
+              with status <strong>{duplicate.status}</strong>.
+            </p>
+            <button
+              onClick={() => { onViewDuplicate(duplicate.id); onClose() }}
+              className="mt-2 text-xs text-amber-800 underline font-semibold hover:text-amber-900">
+              View existing profile →
+            </button>
           </div>
-          {jobs.length > 0 && (
-            <div>
-              <label className="ats-label">Job Position</label>
-              <select className="ats-input" value={form.jobId} onChange={e => setForm(f => ({ ...f, jobId: e.target.value }))}>
-                <option value="">— None —</option>
-                {jobs.map((j: any) => <option key={j.id} value={j.id}>{j.title}</option>)}
-              </select>
-            </div>
-          )}
-          <div className="col-span-2">
-            <label className="ats-label">Skills (comma-separated)</label>
-            <input className="ats-input" value={form.skills} onChange={e => setForm(f => ({ ...f, skills: e.target.value }))} placeholder="react, python, sql…" />
+        )}
+
+        {/* Phone duplicate warning (non-blocking) */}
+        {phoneWarning && (
+          <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-3">
+            <p className="text-xs font-bold text-blue-800 mb-1">ℹ Same phone number detected</p>
+            <p className="text-xs text-blue-700">
+              <strong>{phoneWarning.name}</strong> ({phoneWarning.email}) has the same phone number.
+            </p>
+            <button
+              onClick={() => { onViewDuplicate(phoneWarning.id); onClose() }}
+              className="mt-2 text-xs text-blue-800 underline font-semibold hover:text-blue-900">
+              View that profile →
+            </button>
+            <button onClick={onClose} className="ml-3 text-xs text-blue-600 hover:text-blue-800">Dismiss</button>
           </div>
-        </div>
-        {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg mt-3">{error}</p>}
-        <div className="flex gap-2 mt-5">
-          <button onClick={handleSubmit} disabled={saving} className="btn-primary flex-1 justify-center">{saving ? "Adding…" : "Add Candidate"}</button>
-          <button onClick={onClose} className="btn-secondary">Cancel</button>
-        </div>
+        )}
+
+        {!phoneWarning && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              {[["name","Full Name *","text"],["email","Email *","email"],["phone","Phone","tel"],["currentRole","Current Role","text"],["location","Location","text"]].map(([key, lbl, type]) => (
+                <div key={key} className={key === "email" || key === "location" ? "col-span-2" : ""}>
+                  <label className="ats-label">{lbl}</label>
+                  <input type={type} className="ats-input" value={(form as any)[key]} onChange={e => { setForm(f => ({ ...f, [key]: e.target.value })); if (key === "email") setDuplicate(null) }} />
+                </div>
+              ))}
+              <div>
+                <label className="ats-label">Source</label>
+                <select className="ats-input" value={form.source} onChange={e => setForm(f => ({ ...f, source: e.target.value }))}>
+                  {ALL_SOURCES.map(s => <option key={s} value={s}>{SOURCE_LABELS[s]}</option>)}
+                </select>
+              </div>
+              {jobs.length > 0 && (
+                <div>
+                  <label className="ats-label">Job Position</label>
+                  <select className="ats-input" value={form.jobId} onChange={e => setForm(f => ({ ...f, jobId: e.target.value }))}>
+                    <option value="">— None —</option>
+                    {jobs.map((j: any) => <option key={j.id} value={j.id}>{j.title}</option>)}
+                  </select>
+                </div>
+              )}
+              <div className="col-span-2">
+                <label className="ats-label">Skills (comma-separated)</label>
+                <input className="ats-input" value={form.skills} onChange={e => setForm(f => ({ ...f, skills: e.target.value }))} placeholder="react, python, sql…" />
+              </div>
+            </div>
+            {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg mt-3">{error}</p>}
+            <div className="flex gap-2 mt-5">
+              <button onClick={handleSubmit} disabled={saving} className="btn-primary flex-1 justify-center">{saving ? "Adding…" : "Add Candidate"}</button>
+              <button onClick={onClose} className="btn-secondary">Cancel</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -89,6 +140,7 @@ export default function CandidatesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
+  const [view, setView] = useState<"table" | "kanban">("table")
   const [jobs, setJobs] = useState<any[]>([])
   const [page, setPage] = useState(1)
   const highlightId = searchParams.get("highlight")
@@ -102,13 +154,15 @@ export default function CandidatesPage() {
     if (sourceFilter) p.set("source", sourceFilter)
     if (priorityFilter) p.set("priority", priorityFilter)
     p.set("sortBy", sortBy); p.set("sortOrder", sortOrder)
-    p.set("page", String(pg)); p.set("pageSize", "50")
+    // Kanban loads all candidates (up to 200), table paginates
+    if (view === "kanban") { p.set("page", "1"); p.set("pageSize", "200") }
+    else { p.set("page", String(pg)); p.set("pageSize", "50") }
     const res = await fetch(`/api/candidates?${p}`)
     const data = await res.json()
     setCandidates(data.candidates || [])
     setPagination(data.pagination || {})
     setLoading(false)
-  }, [search, statusFilter, skillFilter, sourceFilter, priorityFilter, sortBy, sortOrder, page])
+  }, [search, statusFilter, skillFilter, sourceFilter, priorityFilter, sortBy, sortOrder, page, view])
 
   useEffect(() => {
     fetch("/api/jobs?active=true").then(r => r.json()).then(setJobs).catch(() => {})
@@ -148,6 +202,16 @@ export default function CandidatesPage() {
             <p className="text-xs text-slate-400 mt-0.5">{pagination.total.toLocaleString()} total · page {pagination.page}/{pagination.totalPages}</p>
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
+              <button onClick={() => setView("table")}
+                className={clsx("px-2.5 py-1.5 text-sm transition-colors", view === "table" ? "bg-slate-800 text-white" : "bg-white text-slate-500 hover:bg-slate-50")}>
+                <List size={14} />
+              </button>
+              <button onClick={() => setView("kanban")}
+                className={clsx("px-2.5 py-1.5 text-sm transition-colors", view === "kanban" ? "bg-slate-800 text-white" : "bg-white text-slate-500 hover:bg-slate-50")}>
+                <LayoutGrid size={14} />
+              </button>
+            </div>
             <a href="/api/export" className="btn-secondary text-sm py-1.5"><Download size={13} />Export</a>
             <button onClick={() => fetchCandidates()} className="btn-secondary text-sm py-1.5"><RefreshCw size={13} /></button>
             {user && user.role !== "VIEWER" && user.role !== "INTERVIEWER" && (
@@ -212,8 +276,21 @@ export default function CandidatesPage() {
         )}
       </div>
 
-      {/* Table */}
-      <div className="flex-1 overflow-auto">
+      {/* Kanban View */}
+      {view === "kanban" && (
+        <KanbanBoard
+          candidates={candidates}
+          loading={loading}
+          canEdit={user?.role !== "VIEWER"}
+          onCardClick={id => setSelectedId(id)}
+          onStatusChange={async (id, status) => {
+            await quickUpdate(id, { status })
+          }}
+        />
+      )}
+
+      {/* Table View */}
+      {view === "table" && <div className="flex-1 overflow-auto">
         <table className="w-full ats-table">
           <thead>
             <tr>
@@ -317,8 +394,10 @@ export default function CandidatesPage() {
         </table>
       </div>
 
-      {/* Pagination */}
-      {pagination.totalPages > 1 && (
+      }
+
+      {/* Pagination — table view only */}
+      {view === "table" && pagination.totalPages > 1 && (
         <div className="bg-white border-t border-slate-200 px-6 py-3 flex items-center justify-between shrink-0">
           <p className="text-sm text-slate-500">Showing {candidates.length} of {pagination.total}</p>
           <div className="flex gap-2">
@@ -338,7 +417,7 @@ export default function CandidatesPage() {
           onDelete={() => { setSelectedId(null); fetchCandidates() }}
         />
       )}
-      {showAdd && <AddModal onClose={() => setShowAdd(false)} onAdded={() => fetchCandidates()} jobs={jobs} />}
+      {showAdd && <AddModal onClose={() => setShowAdd(false)} onAdded={() => fetchCandidates()} jobs={jobs} onViewDuplicate={id => { setSelectedId(id); setShowAdd(false) }} />}
     </AppShell>
   )
 }

@@ -74,6 +74,15 @@ export const CreateNoteSchema = z.object({
   isPrivate: z.boolean().default(false),
 })
 
+export const UpdateInterviewSchema = z.object({
+  status: z.enum(["SCHEDULED","COMPLETED","CANCELLED","RESCHEDULED","NO_SHOW"]).optional(),
+  feedback: z.string().max(5000).nullable().optional(),
+  rating: z.number().int().min(1).max(5).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+  meetingLink: z.string().url().nullable().optional(),
+  scheduledAt: z.string().datetime().optional(),
+})
+
 export const CreateInterviewSchema = z.object({
   candidateId: z.string(),
   scheduledAt: z.string().datetime(),
