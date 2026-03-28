@@ -300,7 +300,7 @@ export async function POST(req: NextRequest) {
   const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_")
   const fileName = `${Date.now()}-${safeName}`
   await writeFile(path.join(uploadsDir, fileName), buffer)
-  const resumePath = `/uploads/${fileName}`
+  const resumePath = `/api/files/${fileName}`
 
   // Fetch job for scoring context
   const job = jobId ? await prisma.job.findUnique({ where: { id: jobId } }) : null
