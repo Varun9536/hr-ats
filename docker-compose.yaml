@@ -55,8 +55,7 @@ services:
         apk add --no-cache postgresql-client &&
         npm ci --ignore-scripts &&
         npx prisma generate &&
-        sh prisma/migrate.sh &&
-        npx tsx prisma/seed.ts
+        sh prisma/migrate.sh
       "
     networks:
       - autohire-network

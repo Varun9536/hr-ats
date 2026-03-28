@@ -42,3 +42,17 @@ else
 fi
 
 echo "==> Migrations complete."
+
+# ── Seed only on fresh install ────────────────────────────────────────────────
+# Check if any users exist — if yes, skip seeding (not a fresh install)
+HAS_USERS=$(psql "$DATABASE_URL" -tAc \
+  "SELECT 1 FROM users LIMIT 1" \
+  2>/dev/null | grep -q "1" && echo "yes" || echo "no")
+
+if [ "$HAS_USERS" = "no" ]; then
+  echo "==> Fresh database — running seed..."
+  npx tsx prisma/seed.ts
+  echo "==> Seed complete."
+else
+  echo "==> Existing data found — skipping seed."
+fi

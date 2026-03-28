@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect } from "react"
-import { X, Save, Trash2, ExternalLink, Lock, Clock, Phone, Linkedin, Globe, Send, Brain, RefreshCw } from "lucide-react"
+import { X, Save, Trash2, ExternalLink, Lock, Clock, Phone, Linkedin, Globe, Send, Brain, RefreshCw, GraduationCap, Building2, ShieldCheck } from "lucide-react"
 import { Candidate, JobApplication, STATUS_LABELS, STATUS_COLORS, CALL_STATUS_LABELS, CALL_STATUS_COLORS, ALL_STATUSES, ALL_CALL_STATUSES, ALL_SOURCES, ALL_PRIORITIES, SOURCE_LABELS } from "@/types"
 import { ScoreBar, ScoreBadge } from "./ScoreBadge"
 import { clsx } from "clsx"
@@ -326,6 +326,52 @@ export default function CandidateModal({ candidateId, matchedSkills, onClose, on
                       <span key={skill} className={clsx("skill-tag", matchedSkills.includes(skill.toLowerCase()) && "matched")}>{skill}</span>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Education */}
+              {!editing && candidate.education && (candidate.education as any[]).length > 0 && (
+                <div>
+                  <p className={labelCls + " flex items-center gap-1.5"}><GraduationCap size={12} />Education</p>
+                  <div className="mt-2 space-y-1.5">
+                    {(candidate.education as any[]).map((e: any, i: number) => (
+                      <div key={i} className="flex items-start gap-2 text-sm text-slate-700 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
+                        <GraduationCap size={13} className="text-slate-400 mt-0.5 shrink-0" />
+                        <div>
+                          <span className="font-semibold">{e.degree}</span>
+                          {e.institution && <span className="text-slate-500"> — {e.institution}</span>}
+                          {e.year && <span className="text-slate-400 text-xs ml-1">({e.year})</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Previous Companies */}
+              {!editing && candidate.previousCompanies && (candidate.previousCompanies as string[]).length > 0 && (
+                <div>
+                  <p className={labelCls + " flex items-center gap-1.5"}><Building2 size={12} />Previous Companies</p>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {(candidate.previousCompanies as string[]).map((company, i) => (
+                      <span key={i} className="text-xs bg-slate-100 text-slate-700 px-2.5 py-1 rounded-full border border-slate-200">
+                        {company}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Parse confidence */}
+              {!editing && candidate.parseConfidence != null && (
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <ShieldCheck size={12} className="text-slate-400" />
+                  <span>Parse confidence:</span>
+                  <span className={clsx("font-semibold",
+                    (candidate.parseConfidence as number) >= 0.8 ? "text-emerald-600" :
+                    (candidate.parseConfidence as number) >= 0.5 ? "text-amber-600" : "text-red-600")}>
+                    {Math.round((candidate.parseConfidence as number) * 100)}%
+                  </span>
                 </div>
               )}
 

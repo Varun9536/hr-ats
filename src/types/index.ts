@@ -46,6 +46,9 @@ export interface Candidate {
   assignedTo?: { id: string; name: string; avatar?: string | null } | null
   tags?: { tag: { id: string; name: string; color: string } }[]
   _count?: { notes: number; interviews: number }
+  education?: { degree: string; institution: string; year?: number }[] | null
+  previousCompanies?: string[] | null
+  parseConfidence?: number | null
   applications?: JobApplication[]
   appliedAt: string
   updatedAt: string

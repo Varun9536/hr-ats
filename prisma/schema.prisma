@@ -112,6 +112,11 @@ model Candidate {
   source              Source      @default(DIRECT)
   priority            Priority    @default(MEDIUM)
 
+  // Parsed resume data
+  education           Json?       // [{degree, institution, year}]
+  previousCompanies   String[]
+  parseConfidence     Float?      // 0.0–1.0
+
   // Scores 0–10
   technicalScore      Float?
   communicationScore  Float?

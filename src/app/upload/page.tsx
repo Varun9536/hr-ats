@@ -1,7 +1,7 @@
 "use client"
 import { useState, useRef, useEffect } from "react"
 import AppShell from "@/components/AppShell"
-import { UploadCloud, CheckCircle2, AlertCircle, FileText, X, Brain, TrendingUp } from "lucide-react"
+import { UploadCloud, CheckCircle2, AlertCircle, FileText, X, Brain, GraduationCap, Building2, ShieldCheck } from "lucide-react"
 import { clsx } from "clsx"
 
 function ScoreBar({ label, score }: { label: string; score: number }) {
@@ -25,7 +25,7 @@ export default function UploadPage() {
   const [jobId, setJobId] = useState("")
   const [jobs, setJobs] = useState<any[]>([])
   const [uploading, setUploading] = useState(false)
-  const [result, setResult] = useState<{ success: boolean; message: string; candidate?: any; score?: any } | null>(null)
+  const [result, setResult] = useState<{ success: boolean; message: string; candidate?: any; score?: any; isScanned?: boolean } | null>(null)
   const [dragging, setDragging] = useState(false)
   const [history, setHistory] = useState<any[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
@@ -34,11 +34,13 @@ export default function UploadPage() {
     fetch("/api/jobs?active=true").then(r => r.json()).then(setJobs).catch(() => {})
   }, [])
 
+  const ACCEPTED_MIME = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword"]
+
   function handleDrop(e: React.DragEvent) {
     e.preventDefault(); setDragging(false)
     const f = e.dataTransfer.files[0]
-    if (f?.type === "application/pdf") { setFile(f); setResult(null) }
-    else setResult({ success: false, message: "Only PDF files are accepted." })
+    if (f && ACCEPTED_MIME.includes(f.type)) { setFile(f); setResult(null) }
+    else setResult({ success: false, message: "Only PDF and Word (.docx) files are accepted." })
   }
 
   async function handleUpload() {
@@ -55,7 +57,7 @@ export default function UploadPage() {
       if (!res.ok) {
         setResult({ success: false, message: data.error || "Upload failed" })
       } else {
-        setResult({ success: true, message: data.updated ? `Updated: ${data.candidate.name}` : `Added: ${data.candidate.name}`, candidate: data.candidate, score: data.score })
+        setResult({ success: true, message: data.updated ? `Updated: ${data.candidate.name}` : `Added: ${data.candidate.name}`, candidate: data.candidate, score: data.score, isScanned: data.isScanned })
         setHistory((h: any[]) => [{ name: data.candidate.name, email: data.candidate.email, updated: data.updated, score: data.score, ts: new Date() }, ...h.slice(0, 9)])
         setFile(null); setPosition("")
       }
@@ -81,7 +83,7 @@ export default function UploadPage() {
               onDrop={handleDrop} onClick={() => fileRef.current?.click()}
               className={clsx("border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all select-none",
                 dragging ? "border-sky-400 bg-sky-50 scale-[1.01]" : file ? "border-sky-400 bg-sky-50/50" : "border-slate-200 hover:border-sky-300 hover:bg-sky-50/30")}>
-              <input ref={fileRef} type="file" accept="application/pdf" className="hidden"
+              <input ref={fileRef} type="file" accept=".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword" className="hidden"
                 onChange={e => { if (e.target.files?.[0]) { setFile(e.target.files[0]); setResult(null) } }} />
               {file ? (
                 <div className="flex items-center justify-center gap-3">
@@ -90,7 +92,7 @@ export default function UploadPage() {
                   </div>
                   <div className="text-left">
                     <p className="text-sm font-semibold text-slate-800">{file.name}</p>
-                    <p className="text-xs text-slate-400">{(file.size / 1024).toFixed(1)} KB · PDF</p>
+                    <p className="text-xs text-slate-400">{(file.size / 1024).toFixed(1)} KB · {file.name.endsWith(".docx") || file.name.endsWith(".doc") ? "Word" : "PDF"}</p>
                   </div>
                   <button onClick={e => { e.stopPropagation(); setFile(null); setResult(null) }} className="ml-2 p-1.5 hover:bg-slate-200 rounded-lg">
                     <X size={13} className="text-slate-400" />
@@ -101,8 +103,8 @@ export default function UploadPage() {
                   <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
                     <UploadCloud size={24} className="text-slate-400" />
                   </div>
-                  <p className="text-sm font-semibold text-slate-700">Drop PDF resume here</p>
-                  <p className="text-xs text-slate-400 mt-1">or click to browse · max 10MB</p>
+                  <p className="text-sm font-semibold text-slate-700">Drop resume here</p>
+                  <p className="text-xs text-slate-400 mt-1">PDF or Word (.docx) · max 10MB</p>
                 </>
               )}
             </div>
@@ -195,11 +197,52 @@ export default function UploadPage() {
                   </div>
                 )}
 
+                {/* Parse confidence */}
+                {result.candidate?.parseConfidence !== undefined && (
+                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-emerald-200">
+                    <ShieldCheck size={13} className="text-slate-500 shrink-0" />
+                    <span className="text-xs text-slate-600">Parse confidence:</span>
+                    <span className={clsx("text-xs font-bold",
+                      result.candidate.parseConfidence >= 0.8 ? "text-emerald-600" :
+                      result.candidate.parseConfidence >= 0.5 ? "text-amber-600" : "text-red-600")}>
+                      {Math.round(result.candidate.parseConfidence * 100)}%
+                    </span>
+                    {result.isScanned && (
+                      <span className="ml-auto text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Scanned PDF detected</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Skills */}
                 {result.candidate?.skills?.length > 0 && (
                   <p className="mt-2 text-xs text-slate-500">
-                    Skills extracted: {result.candidate.skills.slice(0, 6).join(", ")}
+                    <span className="font-semibold text-slate-600">Skills:</span> {result.candidate.skills.slice(0, 6).join(", ")}
                     {result.candidate.skills.length > 6 && ` +${result.candidate.skills.length - 6} more`}
                   </p>
+                )}
+
+                {/* Education */}
+                {result.candidate?.education?.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs font-semibold text-slate-600 flex items-center gap-1 mb-1">
+                      <GraduationCap size={12} />Education extracted
+                    </p>
+                    {result.candidate.education.map((e: any, i: number) => (
+                      <p key={i} className="text-xs text-slate-500">
+                        • {e.degree}{e.institution ? ` — ${e.institution}` : ""}{e.year ? ` (${e.year})` : ""}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                {/* Previous companies */}
+                {result.candidate?.previousCompanies?.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs font-semibold text-slate-600 flex items-center gap-1 mb-1">
+                      <Building2 size={12} />Companies detected
+                    </p>
+                    <p className="text-xs text-slate-500">{result.candidate.previousCompanies.slice(0, 4).join(", ")}</p>
+                  </div>
                 )}
               </div>
             )}
@@ -260,8 +303,12 @@ export default function UploadPage() {
             )}
 
             <div className="ats-card p-4 bg-amber-50 border-amber-100">
-              <p className="text-xs font-bold text-amber-700 mb-1.5">PDF Quality Note</p>
-              <p className="text-xs text-amber-600 leading-relaxed">Scanned or image-based PDFs may not parse correctly. Always verify data in candidate profile.</p>
+              <p className="text-xs font-bold text-amber-700 mb-1.5">Resume Quality Tips</p>
+              <ul className="text-xs text-amber-600 leading-relaxed space-y-1">
+                <li>• <span className="font-semibold">.docx files</span> give the best parsing accuracy</li>
+                <li>• Text-selectable PDFs work well; scanned/image PDFs may not parse</li>
+                <li>• Always verify extracted data in the candidate profile</li>
+              </ul>
             </div>
           </div>
         </div>
